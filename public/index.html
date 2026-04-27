@@ -152,6 +152,23 @@
         <input type="text" id="cfgFbModelName" />
       </div>
       <div class="card">
+        <h3>时区设置</h3>
+        <label>用户时区</label>
+        <select id="cfgTimezone">
+          <option value="auto">自动检测（推荐）</option>
+          <option value="Asia/Shanghai">中国标准时间 (UTC+8)</option>
+          <option value="Asia/Tokyo">日本标准时间 (UTC+9)</option>
+          <option value="America/New_York">美国东部时间 (UTC-5)</option>
+          <option value="America/Los_Angeles">美国太平洋时间 (UTC-8)</option>
+          <option value="Europe/London">英国时间 (UTC+0)</option>
+          <option value="Europe/Paris">欧洲中部时间 (UTC+1)</option>
+          <option value="Australia/Sydney">澳大利亚东部时间 (UTC+10)</option>
+        </select>
+        <p style="font-size:0.8rem;color:#888;margin-top:6px;">
+          选择「自动检测」时，影会根据你发消息的时间自动调整时区。
+        </p>
+      </div>
+      <div class="card">
         <h3>时段设置</h3>
         <label>Check-in 开始（小时）</label>
         <input type="text" id="cfgCheckinStart" />
@@ -292,6 +309,7 @@
         document.getElementById('cfgCheckinEnd').value = cfg.checkin_end_hour || '23';
         document.getElementById('cfgQuietStart').value = cfg.quiet_start_hour || '3';
         document.getElementById('cfgQuietEnd').value = cfg.quiet_end_hour || '10';
+        document.getElementById('cfgTimezone').value = cfg.timezone || 'auto';
       } catch (e) { console.warn('配置加载失败:', e.message); }
     }
 
@@ -309,6 +327,7 @@
         checkin_end_hour: document.getElementById('cfgCheckinEnd').value,
         quiet_start_hour: document.getElementById('cfgQuietStart').value,
         quiet_end_hour: document.getElementById('cfgQuietEnd').value,
+        timezone: document.getElementById('cfgTimezone').value,   // 新增
       };
       try {
         const res = await fetch(API + '/api/config', {
