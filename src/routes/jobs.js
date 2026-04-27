@@ -3,7 +3,7 @@ const router = express.Router();
 const config = require('../config');
 const checkinService = require('../services/checkinService');
 const reminderService = require('../services/reminderService');
-const diaryService = require('../services/dairyService'); // 文件名兼容保留，后续需重命名文件
+const diaryService = require('../services/diaryService'); // 文件名兼容保留，后续需重命名文件
 
 /**
  * POST /api/run-jobs
