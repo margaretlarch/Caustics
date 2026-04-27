@@ -45,6 +45,7 @@ async function processReminders(userId) {
         .from('shadow_schedule')
         .update({ status: 'done', completed_at: now })
         .eq('id', reminder.id);
+      module.exports = { processReminders, maybeExtractReminder, scheduleNextOccurrence };
 
       // 处理重复提醒
       if (reminder.repeat_rule && reminder.repeat_rule !== 'null') {
