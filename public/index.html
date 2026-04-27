@@ -1,388 +1,376 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>caustics · 影的仪表盘</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+    :root {
+      --bg: #f8f6f0; --text: #2c2416; --card: #fffdf7; --accent: #6b9ac4;
+      --border: #e8e0d5; --warm: #d4a574; --shadow: 0 2px 8px rgba(0,0,0,0.05);
+      --radius: 12px; --font: 'Georgia', 'Noto Serif SC', serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Noto Serif SC', serif;
-      background-color: #faf8f5;
-      background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-      color: #3b3a36;
+      font-family: var(--font); background: var(--bg); color: var(--text);
+      line-height: 1.7; max-width: 800px; margin: 0 auto; padding: 20px;
+      background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4a574' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
     }
+    .login-container { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; }
+    .login-container h1 { font-size: 2rem; margin-bottom: 20px; color: var(--accent); }
+    .login-container input {
+      padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+      width: 280px; font-size: 1rem; background: var(--card); text-align: center;
+    }
+    .login-container button {
+      margin-top: 12px; padding: 10px 30px; border: none; background: var(--accent);
+      color: white; border-radius: var(--radius); cursor: pointer; font-size: 1rem;
+    }
+    .error-msg { color: #c44; margin-top: 10px; font-size: 0.9rem; }
+    .dashboard { display: none; }
     .card {
-      background: rgba(255, 255, 250, 0.85);
-      backdrop-filter: blur(4px);
-      border-radius: 1.5rem;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
-      border: 1px solid rgba(180, 170, 150, 0.2);
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; margin-bottom: 20px; box-shadow: var(--shadow);
     }
-    .btn-primary {
-      background: #d4a373;
-      color: white;
-      border-radius: 2rem;
-      padding: 0.5rem 1.5rem;
-      transition: all 0.2s;
+    .card h2 { margin-bottom: 12px; color: var(--accent); font-size: 1.2rem; }
+    .status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
+    .status-dot.online { background: #4c9; }
+    .status-dot.offline { background: #c44; }
+    nav { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+    nav button {
+      padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--card); cursor: pointer; font-family: var(--font);
     }
-    .btn-primary:hover {
-      background: #bc8a5f;
+    nav button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    input[type="text"], input[type="password"], select {
+      padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+      width: 100%; font-size: 0.9rem; background: var(--card); margin-bottom: 8px;
     }
-    .input-field {
-      background: rgba(255,255,250,0.8);
-      border: 1px solid #ddd6c8;
-      border-radius: 1rem;
-      padding: 0.5rem 1rem;
-      width: 100%;
+    .btn-group { display: flex; gap: 8px; margin-top: 10px; }
+    .btn {
+      padding: 6px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem;
     }
-    .grain {
-      background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-warm { background: var(--warm); color: #fff; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 0.75rem; background: var(--accent); color: #fff;
     }
   </style>
 </head>
-<body class="grain min-h-screen p-4 md:p-8">
-  <div id="app" class="max-w-2xl mx-auto">
-    <!-- 登录界面 -->
-    <div id="login-panel" class="card p-6 mt-16">
-      <h1 class="text-3xl font-bold text-center mb-2">caustics</h1>
-      <p class="text-center text-gray-500 mb-6">影的仪表盘</p>
-      <input type="password" id="password-input" placeholder="管理密码" class="input-field mb-3">
-      <button id="login-btn" class="btn-primary w-full">进入</button>
-      <p id="login-error" class="text-red-400 text-sm mt-2 text-center hidden">密码错误</p>
+<body>
+  <div class="login-container" id="loginBox">
+    <h1>caustics</h1>
+    <p style="color:#888;margin-bottom:20px;">影的仪表盘</p>
+    <input type="password" id="passwordInput" placeholder="管理密码" />
+    <button onclick="doLogin()">进入</button>
+    <p class="error-msg" id="loginError"></p>
+  </div>
+
+  <div class="dashboard" id="dashboard">
+    <nav>
+      <button class="active" onclick="showPanel('status')">服务状态</button>
+      <button onclick="showPanel('logs')">记录</button>
+      <button onclick="showPanel('schedule')">待办</button>
+      <button onclick="showPanel('diary')">日记</button>
+      <button onclick="showPanel('settings')">设置</button>
+    </nav>
+
+    <!-- 状态面板 -->
+    <div class="panel active" id="panel-status">
+      <div class="card">
+        <h2>服务状态</h2>
+        <p><span class="status-dot online" id="statusDot"></span> <span id="statusText">检查中...</span></p>
+        <p>最近活动：<span id="lastActivity">--</span></p>
+      </div>
     </div>
 
-    <!-- 主面板（登录后显示） -->
-    <div id="main-panel" class="hidden space-y-6">
-      <!-- 状态卡片 -->
-      <div class="card p-4 flex items-center justify-between">
-        <div>
-          <h2 class="text-lg font-bold">服务状态</h2>
-          <p class="text-sm text-gray-500"><span id="status-text">在线</span> · 最近活动 <span id="last-active">--</span></p>
-        </div>
-        <div class="w-3 h-3 rounded-full bg-green-400" id="status-dot"></div>
+    <!-- 记录面板 -->
+    <div class="panel" id="panel-logs">
+      <div class="card">
+        <h2>影的记录</h2>
+        <div id="logsList">加载中...</div>
       </div>
+    </div>
 
-      <!-- 标签切换 -->
-      <div class="flex space-x-2 overflow-x-auto pb-1">
-        <button class="tab-btn px-4 py-1 rounded-full bg-[#d4a373] text-white text-sm" data-tab="records">记录</button>
-        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="todos">待办</button>
-        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="diary">日记</button>
-        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="settings">设置</button>
+    <!-- 待办面板 -->
+    <div class="panel" id="panel-schedule">
+      <div class="card">
+        <h2>待办清单</h2>
+        <div id="scheduleList">加载中...</div>
       </div>
+    </div>
 
-      <!-- 内容区 -->
-      <div id="tab-records" class="tab-content space-y-3">
-        <div id="records-list" class="text-sm text-gray-600">加载中...</div>
+    <!-- 日记面板 -->
+    <div class="panel" id="panel-diary">
+      <div class="card">
+        <h2>Daily Log</h2>
+        <div id="diaryList">加载中...</div>
       </div>
-      <div id="tab-todos" class="tab-content hidden space-y-3">
-        <div id="todos-list" class="text-sm text-gray-600">加载中...</div>
-      </div>
-      <div id="tab-diary" class="tab-content hidden space-y-3">
-        <div id="diary-list" class="text-sm text-gray-600">加载中...</div>
-      </div>
-      <div id="tab-settings" class="tab-content hidden">
-        <div class="card p-4 space-y-4">
-          <h3 class="font-bold">API 配置</h3>
-          <div>
-            <label class="text-xs text-gray-500">Provider</label>
-            <select id="cfg-provider" class="input-field">
-              <option value="anthropic">Anthropic</option>
-              <option value="openai">OpenAI</option>
-              <option value="deepseek">DeepSeek</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">API Base URL</label>
-            <input id="cfg-base-url" class="input-field" placeholder="https://api.anthropic.com/v1/messages">
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">API Key</label>
-            <input id="cfg-api-key" type="password" class="input-field" placeholder="sk-...">
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">模型名称</label>
-            <input id="cfg-model" class="input-field" placeholder="claude-haiku-4-5-20251001">
-          </div>
-          <div class="flex space-x-2">
-            <button id="test-conn-btn" class="btn-primary flex-1">测试连接</button>
-            <button id="save-config-btn" class="btn-primary flex-1">保存配置</button>
-          </div>
-          <div id="test-result" class="text-sm"></div>
-          <hr class="my-2">
-          <h4 class="font-bold mt-4">Fallback 配置</h4>
-          <div>
-            <label class="text-xs text-gray-500">Provider</label>
-            <select id="fb-provider" class="input-field">
-              <option value="deepseek">DeepSeek</option>
-              <option value="openai">OpenAI</option>
-              <option value="anthropic">Anthropic</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">API Base URL</label>
-            <input id="fb-base-url" class="input-field">
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">API Key</label>
-            <input id="fb-api-key" type="password" class="input-field">
-          </div>
-          <div>
-            <label class="text-xs text-gray-500">模型名称</label>
-            <input id="fb-model" class="input-field">
-          </div>
-          <hr class="my-2">
-          <h4 class="font-bold">时段设置</h4>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="text-xs text-gray-500">Check-in 开始</label>
-              <input id="checkin-start" type="number" class="input-field" min="0" max="23">
-            </div>
-            <div>
-              <label class="text-xs text-gray-500">Check-in 结束</label>
-              <input id="checkin-end" type="number" class="input-field" min="0" max="23">
-            </div>
-            <div>
-              <label class="text-xs text-gray-500">安静开始</label>
-              <input id="quiet-start" type="number" class="input-field" min="0" max="23">
-            </div>
-            <div>
-              <label class="text-xs text-gray-500">安静结束</label>
-              <input id="quiet-end" type="number" class="input-field" min="0" max="23">
-            </div>
-          </div>
+    </div>
+
+    <!-- 设置面板 -->
+    <div class="panel" id="panel-settings">
+      <div class="card">
+        <h3>API 配置</h3>
+        <label>Provider</label>
+        <select id="cfgProvider">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai">OpenAI</option>
+          <option value="deepseek">DeepSeek</option>
+        </select>
+        <label>API Base URL</label>
+        <input type="text" id="cfgBaseUrl" />
+        <label>API Key</label>
+        <input type="password" id="cfgApiKey" />
+        <label>模型名称</label>
+        <input type="text" id="cfgModelName" />
+        <div class="btn-group">
+          <button class="btn btn-warm" onclick="testConnection()">测试连接</button>
+          <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
         </div>
+        <p id="testResult" style="margin-top:10px;font-size:0.85rem;"></p>
+      </div>
+      <div class="card">
+        <h3>Fallback 配置</h3>
+        <label>Provider</label>
+        <select id="cfgFbProvider">
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai">OpenAI</option>
+          <option value="anthropic">Anthropic</option>
+        </select>
+        <label>API Base URL</label>
+        <input type="text" id="cfgFbBaseUrl" />
+        <label>API Key</label>
+        <input type="password" id="cfgFbApiKey" />
+        <label>模型名称</label>
+        <input type="text" id="cfgFbModelName" />
+      </div>
+      <div class="card">
+        <h3>时段设置</h3>
+        <label>Check-in 开始（小时）</label>
+        <input type="text" id="cfgCheckinStart" />
+        <label>Check-in 结束（小时）</label>
+        <input type="text" id="cfgCheckinEnd" />
+        <label>安静开始（小时）</label>
+        <input type="text" id="cfgQuietStart" />
+        <label>安静结束（小时）</label>
+        <input type="text" id="cfgQuietEnd" />
       </div>
     </div>
   </div>
 
   <script>
-    // ---------- 全局状态 ----------
-    const supabaseUrl = 'https://rxvisgjsdsprbgknlnpz.supabase.co';      // 手动替换为你的 Supabase URL
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4dmlzZ2pzZHNwcmJna25sbnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MDg5NjksImV4cCI6MjA5MjE4NDk2OX0.QLXI2i_n4_F7CwDnRTocWfAtP6uwwyo_o1NOmgOSduM';      // 手动替换为你的 anon key
-    const apiBase = window.location.origin;        // Dashboard 与后端同域
+    const API = ''; // 同源，空字符串
+    const SUPABASE_URL = 'https://xxxxx.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOi...'; // 请替换为实际 anon key
 
-    let authToken = localStorage.getItem('caustics_dash_token') || '';
-    let supabase;
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let authToken = localStorage.getItem('caustics_token') || '';
 
-    function initSupabase() {
-      if (supabaseUrl.startsWith('YOUR_')) {
-        console.warn('请将 public/index.html 中的 Supabase 配置替换为实际值');
-      }
-      supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-    }
-
-    // ---------- 登录 ----------
-    document.getElementById('login-btn').addEventListener('click', async () => {
-      const pwd = document.getElementById('password-input').value;
+    async function doLogin() {
+      const pw = document.getElementById('passwordInput').value;
       try {
-        const res = await fetch(`${apiBase}/api/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pwd })
+        const res = await fetch(API + '/api/auth/login', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw }),
         });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json();
+        if (data.token) {
           authToken = data.token;
-          localStorage.setItem('caustics_dash_token', authToken);
-          showMainPanel();
+          localStorage.setItem('caustics_token', authToken);
+          document.getElementById('loginBox').style.display = 'none';
+          document.getElementById('dashboard').style.display = 'block';
+          initDashboard();
         } else {
-          document.getElementById('login-error').classList.remove('hidden');
+          document.getElementById('loginError').textContent = '密码错误';
         }
       } catch (e) {
-        document.getElementById('login-error').classList.remove('hidden');
+        document.getElementById('loginError').textContent = '连接失败';
       }
-    });
-
-    // 如果已有 token，直接尝试加载主面板（不验证，后续请求会验证）
-    if (authToken) showMainPanel();
-
-    function showMainPanel() {
-      document.getElementById('login-panel').classList.add('hidden');
-      document.getElementById('main-panel').classList.remove('hidden');
-      initSupabase();
-      loadServiceStatus();
-      switchTab('records');
     }
 
-    // ---------- 标签切换 ----------
-    document.querySelectorAll('.tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.replace('bg-[#d4a373]', 'bg-white/60'));
-        btn.classList.replace('bg-white/60', 'bg-[#d4a373]');
-        const tab = btn.dataset.tab;
-        switchTab(tab);
-      });
-    });
+    function authHeaders() { return { 'Authorization': 'Bearer ' + authToken, 'Content-Type': 'application/json' }; }
 
-    function switchTab(tab) {
-      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-      document.getElementById(`tab-${tab}`).classList.remove('hidden');
-      if (tab === 'records') loadRecords();
-      else if (tab === 'todos') loadTodos();
-      else if (tab === 'diary') loadDiary();
-      else if (tab === 'settings') loadSettings();
+    async function initDashboard() {
+      checkHealth();
+      loadStatus();
+      // 根据 hash 或默认显示面板
+      const hash = location.hash.replace('#', '') || 'status';
+      showPanel(hash);
     }
 
-    // ---------- 数据加载函数（使用 Supabase anon key 直读） ----------
-    async function loadServiceStatus() {
+    async function checkHealth() {
       try {
-        const { data, error } = await supabase.from('shadow_logs').select('created_at').order('created_at', { ascending: false }).limit(1);
-        if (!error && data.length > 0) {
-          document.getElementById('last-active').textContent = new Date(data[0].created_at).toLocaleString();
-        } else {
-          document.getElementById('last-active').textContent = '暂无';
-        }
-        document.getElementById('status-text').textContent = '在线';
-        document.getElementById('status-dot').classList.remove('bg-gray-400');
-        document.getElementById('status-dot').classList.add('bg-green-400');
+        const res = await fetch(API + '/health');
+        const data = await res.json();
+        document.getElementById('statusDot').className = 'status-dot online';
+        document.getElementById('statusText').textContent = '在线';
+        document.getElementById('lastActivity').textContent = new Date(data.time).toLocaleString('zh-CN');
       } catch (e) {
-        document.getElementById('status-text').textContent = '离线';
-        document.getElementById('status-dot').classList.remove('bg-green-400');
-        document.getElementById('status-dot').classList.add('bg-gray-400');
+        document.getElementById('statusDot').className = 'status-dot offline';
+        document.getElementById('statusText').textContent = '休眠/离线';
       }
     }
 
-    async function loadRecords() {
-      const list = document.getElementById('records-list');
-      list.innerHTML = '加载中...';
-      const { data, error } = await supabase.from('shadow_logs').select('*').order('created_at', { ascending: false }).limit(50);
-      if (error) { list.innerHTML = `<p class="text-red-400">加载失败: ${error.message}</p>`; return; }
-      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无记录</p>'; return; }
-      list.innerHTML = data.map(log => `
-        <div class="card p-3 text-sm">
-          <div class="text-gray-400 text-xs">${new Date(log.created_at).toLocaleString()} · ${log.category}</div>
-          <div class="mt-1 whitespace-pre-wrap">${log.content}</div>
-        </div>
-      `).join('');
+    async function loadStatus() {
+      const [logs, schedule, diary] = await Promise.all([
+        supabase.from('shadow_logs').select('*').order('created_at', { ascending: false }).limit(20),
+        supabase.from('shadow_schedule').select('*').order('created_at', { ascending: false }).limit(20),
+        supabase.from('shadow_diary').select('*').order('date', { ascending: false }).limit(7),
+      ]);
+      renderLogs(logs.data || []);
+      renderSchedule(schedule.data || []);
+      renderDiary(diary.data || []);
+      loadSettings();
     }
 
-    async function loadTodos() {
-      const list = document.getElementById('todos-list');
-      list.innerHTML = '加载中...';
-      const { data, error } = await supabase.from('shadow_schedule').select('*').order('created_at', { ascending: false });
-      if (error) { list.innerHTML = `<p class="text-red-400">${error.message}</p>`; return; }
-      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无待办</p>'; return; }
-      list.innerHTML = data.map(item => `
-        <div class="card p-3 flex justify-between items-start">
-          <div>
-            <div class="font-medium">${item.title} ${item.status === 'done' ? '✅' : item.status === 'cancelled' ? '❌' : '⏳'}</div>
-            ${item.description ? `<div class="text-xs text-gray-500">${item.description}</div>` : ''}
-            <div class="text-xs text-gray-400">${item.remind_at ? '提醒: '+new Date(item.remind_at).toLocaleString() : ''}</div>
-          </div>
-          ${item.status === 'pending' ? `<div class="flex space-x-1">
-            <button class="text-green-600 text-xs" onclick="updateTodo('${item.id}', 'done')">完成</button>
-            <button class="text-red-400 text-xs" onclick="updateTodo('${item.id}', 'cancelled')">取消</button>
-          </div>` : ''}
-        </div>
-      `).join('');
+    function renderLogs(data) {
+      if (data.length === 0) {
+        document.getElementById('logsList').innerHTML = '<p>暂无记录。</p>';
+        return;
+      }
+      const html = data.map(l => `<p><small>${new Date(l.created_at).toLocaleString('zh-CN')}</small> — ${escapeHtml(l.content?.substring(0, 120) || '')}</p>`).join('');
+      document.getElementById('logsList').innerHTML = html;
     }
 
-    async function loadDiary() {
-      const list = document.getElementById('diary-list');
-      list.innerHTML = '加载中...';
-      const { data, error } = await supabase.from('shadow_diary').select('*').order('date', { ascending: false }).limit(20);
-      if (error) { list.innerHTML = `<p class="text-red-400">${error.message}</p>`; return; }
-      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无日记</p>'; return; }
-      list.innerHTML = data.map(d => `
-        <div class="card p-3">
-          <div class="font-medium">${d.date}</div>
-          <div class="text-sm mt-1">${d.summary || '无摘要'}</div>
-        </div>
-      `).join('');
+    function renderSchedule(data) {
+      if (data.length === 0) {
+        document.getElementById('scheduleList').innerHTML = '<p>暂无待办。</p>';
+        return;
+      }
+      const html = data.map(s => {
+        let statusBadge = s.status === 'done' ? '<span class="badge">已完成</span>' :
+          s.status === 'cancelled' ? '<span class="badge" style="background:#999;">已取消</span>' :
+          '<span class="badge" style="background:var(--warm);">待办</span>';
+        let actions = '';
+        if (s.status === 'pending') {
+          actions = `<button class="btn btn-primary" style="font-size:0.75rem;padding:2px 8px;" onclick="markDone('${s.id}')">标记完成</button>`;
+        }
+        return `<p>${statusBadge} <strong>${escapeHtml(s.title)}</strong> ${s.description ? '— ' + escapeHtml(s.description) : ''} <small>${s.remind_at ? '提醒: ' + new Date(s.remind_at).toLocaleString('zh-CN') : ''}</small> ${actions}</p>`;
+      }).join('');
+      document.getElementById('scheduleList').innerHTML = html;
+    }
+
+    function renderDiary(data) {
+      if (data.length === 0) {
+        document.getElementById('diaryList').innerHTML = '<p>暂无日记。</p>';
+        return;
+      }
+      const html = data.map(d => `<div class="card"><strong>${d.date}</strong><p>${escapeHtml(d.summary || '暂无摘要')}</p></div>`).join('');
+      document.getElementById('diaryList').innerHTML = html;
+    }
+
+    async function markDone(id) {
+      try {
+        const res = await fetch(API + '/api/schedule/' + id, {
+          method: 'PATCH', headers: authHeaders(),
+          body: JSON.stringify({ status: 'done' }),
+        });
+        if (res.ok) loadStatus();
+      } catch (e) { alert('操作失败'); }
     }
 
     async function loadSettings() {
-      if (!authToken) return;
       try {
-        const res = await fetch(`${apiBase}/api/config`, { headers: { 'Authorization': `Bearer ${authToken}` } });
-        if (!res.ok) throw new Error('加载失败');
+        const res = await fetch(API + '/api/config', { headers: authHeaders() });
         const cfg = await res.json();
-        document.getElementById('cfg-provider').value = cfg.api_provider || 'anthropic';
-        document.getElementById('cfg-base-url').value = cfg.api_base_url || '';
-        document.getElementById('cfg-api-key').value = cfg.api_key || '';
-        document.getElementById('cfg-model').value = cfg.model_name || '';
-        document.getElementById('fb-provider').value = cfg.fallback_provider || 'deepseek';
-        document.getElementById('fb-base-url').value = cfg.fallback_api_base_url || '';
-        document.getElementById('fb-api-key').value = cfg.fallback_api_key || '';
-        document.getElementById('fb-model').value = cfg.fallback_model_name || '';
-        document.getElementById('checkin-start').value = cfg.checkin_start_hour || '10';
-        document.getElementById('checkin-end').value = cfg.checkin_end_hour || '23';
-        document.getElementById('quiet-start').value = cfg.quiet_start_hour || '3';
-        document.getElementById('quiet-end').value = cfg.quiet_end_hour || '10';
+        document.getElementById('cfgProvider').value = cfg.api_provider || 'anthropic';
+        document.getElementById('cfgBaseUrl').value = cfg.api_base_url || '';
+        document.getElementById('cfgApiKey').value = cfg.api_key || '';
+        document.getElementById('cfgModelName').value = cfg.model_name || '';
+        document.getElementById('cfgFbProvider').value = cfg.fallback_provider || 'deepseek';
+        document.getElementById('cfgFbBaseUrl').value = cfg.fallback_api_base_url || '';
+        document.getElementById('cfgFbApiKey').value = cfg.fallback_api_key || '';
+        document.getElementById('cfgFbModelName').value = cfg.fallback_model_name || '';
+        document.getElementById('cfgCheckinStart').value = cfg.checkin_start_hour || '10';
+        document.getElementById('cfgCheckinEnd').value = cfg.checkin_end_hour || '23';
+        document.getElementById('cfgQuietStart').value = cfg.quiet_start_hour || '3';
+        document.getElementById('cfgQuietEnd').value = cfg.quiet_end_hour || '10';
+      } catch (e) { console.warn('配置加载失败:', e.message); }
+    }
+
+    async function saveConfig() {
+      const payload = {
+        api_provider: document.getElementById('cfgProvider').value,
+        api_base_url: document.getElementById('cfgBaseUrl').value,
+        api_key: document.getElementById('cfgApiKey').value,
+        model_name: document.getElementById('cfgModelName').value,
+        fallback_provider: document.getElementById('cfgFbProvider').value,
+        fallback_api_base_url: document.getElementById('cfgFbBaseUrl').value,
+        fallback_api_key: document.getElementById('cfgFbApiKey').value,
+        fallback_model_name: document.getElementById('cfgFbModelName').value,
+        checkin_start_hour: document.getElementById('cfgCheckinStart').value,
+        checkin_end_hour: document.getElementById('cfgCheckinEnd').value,
+        quiet_start_hour: document.getElementById('cfgQuietStart').value,
+        quiet_end_hour: document.getElementById('cfgQuietEnd').value,
+      };
+      try {
+        const res = await fetch(API + '/api/config', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (data.success) alert('配置已保存');
+        else alert('保存失败: ' + (data.error || ''));
+      } catch (e) { alert('请求失败: ' + e.message); }
+    }
+
+    async function testConnection() {
+      const payload = {
+        provider: document.getElementById('cfgProvider').value,
+        api_base_url: document.getElementById('cfgBaseUrl').value,
+        api_key: document.getElementById('cfgApiKey').value,
+        model_name: document.getElementById('cfgModelName').value,
+      };
+      document.getElementById('testResult').textContent = '测试中...';
+      try {
+        const res = await fetch(API + '/api/config/test-connection', {
+          method: 'POST', headers: authHeaders(),
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        document.getElementById('testResult').textContent = data.success
+          ? `连接成功！延迟 ${data.latency_ms}ms`
+          : `连接失败: ${data.error}`;
       } catch (e) {
-        console.error(e);
+        document.getElementById('testResult').textContent = '请求失败: ' + e.message;
       }
     }
 
-    // ---------- 待办操作 ----------
-    window.updateTodo = async function(id, status) {
-      if (!authToken) return;
-      await fetch(`${apiBase}/api/schedule/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-        body: JSON.stringify({ status })
-      });
-      loadTodos(); // 刷新列表
-    };
+    function showPanel(name) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+      const panel = document.getElementById('panel-' + name);
+      if (panel) panel.classList.add('active');
+      const btn = document.querySelector(`nav button[onclick*="${name}"]`);
+      if (btn) btn.classList.add('active');
+      if (name === 'status') checkHealth();
+      if (name === 'logs' || name === 'schedule' || name === 'diary') loadStatus();
+      if (name === 'settings') loadSettings();
+      location.hash = name;
+    }
 
-    // ---------- 设置保存 ----------
-    document.getElementById('save-config-btn').addEventListener('click', async () => {
-      const payload = {
-        api_provider: document.getElementById('cfg-provider').value,
-        api_base_url: document.getElementById('cfg-base-url').value,
-        api_key: document.getElementById('cfg-api-key').value,
-        model_name: document.getElementById('cfg-model').value,
-        fallback_provider: document.getElementById('fb-provider').value,
-        fallback_api_base_url: document.getElementById('fb-base-url').value,
-        fallback_api_key: document.getElementById('fb-api-key').value,
-        fallback_model_name: document.getElementById('fb-model').value,
-        checkin_start_hour: document.getElementById('checkin-start').value,
-        checkin_end_hour: document.getElementById('checkin-end').value,
-        quiet_start_hour: document.getElementById('quiet-start').value,
-        quiet_end_hour: document.getElementById('quiet-end').value,
-      };
-      try {
-        const res = await fetch(`${apiBase}/api/config`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify(payload)
-        });
-        if (res.ok) alert('配置已保存');
-        else alert('保存失败');
-      } catch (e) {
-        alert('网络错误');
-      }
-    });
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str || '';
+      return div.innerHTML;
+    }
 
-    // ---------- 测试连接 ----------
-    document.getElementById('test-conn-btn').addEventListener('click', async () => {
-      const resultDiv = document.getElementById('test-result');
-      resultDiv.textContent = '测试中...';
-      const payload = {
-        provider: document.getElementById('cfg-provider').value,
-        api_base_url: document.getElementById('cfg-base-url').value,
-        api_key: document.getElementById('cfg-api-key').value,
-        model_name: document.getElementById('cfg-model').value,
-      };
-      try {
-        const res = await fetch(`${apiBase}/api/config/test-connection`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-        if (data.success) {
-          resultDiv.innerHTML = `<span class="text-green-600">✓ 连接成功，延迟 ${data.latency_ms}ms</span>`;
-        } else {
-          resultDiv.innerHTML = `<span class="text-red-400">✗ 失败: ${data.error} (${data.latency_ms}ms)</span>`;
-        }
-      } catch (e) {
-        resultDiv.innerHTML = `<span class="text-red-400">请求出错</span>`;
+    // 自动登录（已有有效 token）
+    (function () {
+      if (authToken) {
+        // token 在内存重启后失效，但仍尝试
+        document.getElementById('loginBox').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+        initDashboard();
       }
-    });
+    })();
   </script>
 </body>
 </html>
