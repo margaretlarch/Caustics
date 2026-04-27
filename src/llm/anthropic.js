@@ -1,43 +1,31 @@
-const LLMProvider = require('./provider');
-const axios = require('axios');
+// llm/providers/anthropic.js
+const fetch = require("node-fetch");
+const LLMProvider = require("./base");
 
 class AnthropicProvider extends LLMProvider {
-  async chat(messages, modelConfig) {
-    const { apiBaseUrl, apiKey, modelName } = modelConfig;
+  async chat(messages, config) {
+    const system = messages.find(m => m.role === "system")?.content;
 
-    // 提取 system prompt（约定第一条 role 为 system 的消息）
-    const systemMsg = messages.find(m => m.role === 'system');
-    const system = systemMsg ? systemMsg.content : '';
+    const filtered = messages.filter(m => m.role !== "system");
 
-    // 转换 messages 格式，去除 system 消息
-    const convertedMessages = messages
-      .filter(m => m.role !== 'system')
-      .map(m => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content,
-      }));
-
-    const payload = {
-      model: modelName,
-      max_tokens: 1024,
-      system: system || undefined,
-      messages: convertedMessages,
-    };
-
-    const response = await axios.post(apiBaseUrl, payload, {
+    const res = await fetch(config.api_base_url, {
+      method: "POST",
       headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
+        "x-api-key": config.api_key,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01"
       },
-      timeout: 30000,
+      body: JSON.stringify({
+        model: config.model_name,
+        system,
+        messages: filtered,
+        max_tokens: 1024
+      })
     });
 
-    const data = response.data;
-    if (data.content && data.content[0] && data.content[0].text) {
-      return data.content[0].text;
-    }
-    throw new Error('Unexpected Anthropic response structure');
+    const data = await res.json();
+
+    return data?.content?.[0]?.text || "";
   }
 }
 
