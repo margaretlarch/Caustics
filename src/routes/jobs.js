@@ -3,7 +3,7 @@ const router = express.Router();
 const config = require('../config');
 const checkinService = require('../services/checkinService');
 const reminderService = require('../services/reminderService');
-const diaryService = require('../services/diaryService');
+const diaryService = require('../services/dairyService'); // 文件名兼容保留，后续需重命名文件
 
 /**
  * POST /api/run-jobs
@@ -17,7 +17,15 @@ router.post('/', async (req, res) => {
   const results = await Promise.allSettled([
     checkinService.tryCheckin(userId),
     reminderService.processReminders(userId),
-    diaryService.generateDailyLog(userId),
+    (async () => {
+      // Daily Log 仅当接近配置的小时/分钟时才生成
+      const should = await diaryService.shouldGenerateDiary();
+      if (!should) {
+        console.log('[jobs] 未到 Daily Log 生成时间，跳过');
+        return 'skipped';
+      }
+      return diaryService.generateDailyLog(userId);
+    })(),
   ]);
 
   const summary = {
@@ -26,7 +34,6 @@ router.post('/', async (req, res) => {
     diary: results[2].status,
     timestamp: new Date().toISOString(),
   };
-
   console.log('[jobs] 定时任务执行完毕:', summary);
   res.json(summary);
 });
