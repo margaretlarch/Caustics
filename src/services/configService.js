@@ -1,66 +1,64 @@
-const supabase = require('./supabase');
-const config = require('../config');
+// services/configService.js
 
-let cache = {};
-let cacheTimestamp = 0;
-const CACHE_TTL = 30 * 1000; // 30 秒
+const CACHE_TTL = 30 * 1000; // 30秒
 
-/**
- * 从 shadow_config 表加载全部配置到内存缓存
- */
-async function loadConfigFromDB() {
+let cache = null;
+let cacheTime = 0;
+
+function buildFallback() {
+  return {
+    provider: process.env.DEFAULT_API_PROVIDER || "anthropic",
+    api_base_url: process.env.DEFAULT_API_BASE_URL,
+    api_key: process.env.DEFAULT_API_KEY,
+    model_name: process.env.DEFAULT_MODEL_NAME,
+    fallback_provider: process.env.DEFAULT_FALLBACK_PROVIDER || "openai",
+    fallback_api_base_url: process.env.DEFAULT_FALLBACK_API_BASE_URL,
+    fallback_api_key: process.env.DEFAULT_FALLBACK_API_KEY,
+    fallback_model_name: process.env.DEFAULT_FALLBACK_MODEL_NAME,
+  };
+}
+
+async function loadFromDB(supabase) {
   const { data, error } = await supabase
-    .from('shadow_config')
-    .select('key, value');
+    .from("shadow_config")
+    .select("key,value");
 
-  if (error) {
-    console.error('[configService] 无法加载数据库配置，使用环境变量 fallback:', error.message);
-    return;
-  }
+  if (error) throw error;
 
   const map = {};
   for (const row of data) {
     map[row.key] = row.value;
   }
-  cache = map;
-  cacheTimestamp = Date.now();
-  console.log('[configService] 配置已从数据库刷新，共', Object.keys(map).length, '项');
+
+  return map;
 }
 
-/**
- * 获取配置项，优先级：DB 缓存 > 环境变量 > 硬编码默认值
- */
-async function get(key, defaultValue = '') {
-  if (Date.now() - cacheTimestamp > CACHE_TTL) {
-    await loadConfigFromDB();
+async function getConfig(supabase) {
+  const now = Date.now();
+
+  if (cache && now - cacheTime < CACHE_TTL) {
+    return cache;
   }
-  if (cache[key] !== undefined) return cache[key];
 
-  // fallback 到环境变量 / 默认值
-  const envMap = {
-    api_provider: config.defaults.apiProvider,
-    api_base_url: config.defaults.apiBaseUrl,
-    api_key: config.defaults.apiKey,
-    model_name: config.defaults.modelName,
-    fallback_provider: config.defaults.fallbackProvider,
-    fallback_api_base_url: config.defaults.fallbackApiBaseUrl,
-    fallback_api_key: config.defaults.fallbackApiKey,
-    fallback_model_name: config.defaults.fallbackModelName,
-    checkin_start_hour: String(config.defaultsSchedule.checkinStartHour),
-    checkin_end_hour: String(config.defaultsSchedule.checkinEndHour),
-    quiet_start_hour: String(config.defaultsSchedule.quietStartHour),
-    quiet_end_hour: String(config.defaultsSchedule.quietEndHour),
-  };
+  try {
+    const dbConfig = await loadFromDB(supabase);
+    const fallback = buildFallback();
 
-  return envMap[key] || defaultValue;
+    cache = { ...fallback, ...dbConfig };
+    cacheTime = now;
+
+    return cache;
+  } catch (e) {
+    console.error("config load failed, fallback to env:", e);
+    return buildFallback();
+  }
 }
 
-/**
- * 强制刷新缓存（Dashboard 保存配置后调用）
- */
-async function invalidateCache() {
-  cacheTimestamp = 0;
-  await loadConfigFromDB();
+function invalidateCache() {
+  cache = null;
 }
 
-module.exports = { get, invalidateCache, loadConfigFromDB };
+module.exports = {
+  getConfig,
+  invalidateCache,
+};
