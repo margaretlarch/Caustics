@@ -6,7 +6,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { getProvider } = require('../llm');
 const axios = require('axios');
 
-// 获取配置（脱敏）
+// ---------- 获取当前配置（脱敏） ----------
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const keys = [
@@ -23,13 +23,13 @@ router.get('/', authMiddleware, async (req, res) => {
       'quiet_start_hour',
       'quiet_end_hour',
       'system_prompt',
-      'timezone',          // 新增
-      'timezone_offset',   // 新增
+      'timezone',            // 手动设定的时区名
+      'timezone_offset',     // 自动计算的 UTC 偏移（分钟）
     ];
     const config = {};
     for (const key of keys) {
       let value = await configService.get(key, '');
-      // 对密钥脱敏
+      // 对 API 密钥脱敏
       if ((key === 'api_key' || key === 'fallback_api_key') && value.length > 4) {
         value = '****' + value.slice(-4);
       }
@@ -41,14 +41,15 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 保存配置
+// ---------- 保存配置 ----------
 router.post('/', authMiddleware, async (req, res) => {
   const updates = req.body;
   if (!updates || typeof updates !== 'object') {
-    return res.status(400).json({ error: '无效数据' });
+    return res.status(400).json({ error: '请求体无效' });
   }
 
   try {
+    // 允许前端写入的字段白名单
     const allowedKeys = [
       'api_provider',
       'api_base_url',
@@ -63,16 +64,23 @@ router.post('/', authMiddleware, async (req, res) => {
       'quiet_start_hour',
       'quiet_end_hour',
       'system_prompt',
+      'timezone',            // ← 允许前端设置时区
     ];
+    // 注意：timezone_offset 由系统自动维护，不允许前端直接写入
 
     for (const [key, value] of Object.entries(updates)) {
-      if (!allowedKeys.includes(key)) continue;
+      if (!allowedKeys.includes(key)) continue;   // 跳过未授权的字段
       const { error } = await supabase
         .from('shadow_config')
         .upsert({ key, value: String(value) }, { onConflict: 'key' });
-      if (error) throw error;
+
+      if (error) {
+        console.error(`[configRoutes] 保存 ${key} 失败:`, error.message);
+        throw error;
+      }
     }
 
+    // 让缓存失效，下次读取时重新从数据库加载
     await configService.invalidateCache();
     res.json({ success: true });
   } catch (err) {
@@ -80,11 +88,11 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 测试连通性
+// ---------- 测试 API 连接 ----------
 router.post('/test-connection', authMiddleware, async (req, res) => {
   const { provider: provName, api_base_url, api_key, model_name } = req.body;
   if (!provName || !api_key) {
-    return res.status(400).json({ error: 'provider 和 api_key 必填' });
+    return res.status(400).json({ error: 'provider 和 api_key 为必填项' });
   }
 
   const start = Date.now();
@@ -104,7 +112,7 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
   }
 });
 
-// 获取模型列表（仅对 OpenAI 兼容格式有效）
+// ---------- 获取模型列表（仅 OpenAI 兼容接口） ----------
 router.get('/models', authMiddleware, async (req, res) => {
   const providerName =
     req.query.provider || (await configService.get('api_provider', 'anthropic'));
@@ -114,12 +122,12 @@ router.get('/models', authMiddleware, async (req, res) => {
     req.query.api_key || (await configService.get('api_key'));
 
   if (!baseUrl || !apiKey) {
-    return res.status(400).json({ error: '缺少必要信息' });
+    return res.status(400).json({ error: '缺少 API base URL 或 key' });
   }
 
-  // 仅 OpenAI / DeepSeek 支持模型列表
+  // 只有 OpenAI 格式的 provider 支持列出模型
   if (providerName !== 'openai' && providerName !== 'deepseek') {
-    return res.json({ models: [], note: '仅 OpenAI 兼容格式支持此功能' });
+    return res.json({ models: [], note: '当前 provider 不支持列出模型' });
   }
 
   try {
