@@ -22,6 +22,7 @@ router.get('/', authMiddleware, async (req, res) => {
       'checkin_end_hour',
       'quiet_start_hour',
       'quiet_end_hour',
+      'timezone',
       'system_prompt',
     ];
     const config = {};
