@@ -66,6 +66,27 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// 👇 放在所有 app.get / app.post 下面
+
+const { canRun } = require("./services/jobLock");
+
+app.post("/api/run-jobs", async (req, res) => {
+
+  if (!canRun()) {
+    return res.json({ skipped: true });
+  }
+
+  console.log("Running scheduled jobs...");
+
+  // 👉 这里先写空也可以
+  // 后面你再慢慢加功能
+  // await runCheckins();
+  // await runReminders();
+  // await runDailyLog();
+
+  res.json({ ok: true });
+});
+
 // 启动
 async function start() {
   try {
