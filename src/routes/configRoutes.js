@@ -10,15 +10,23 @@ const axios = require('axios');
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const keys = [
-      'api_provider', 'api_base_url', 'api_key', 'model_name',
-      'fallback_provider', 'fallback_api_base_url', 'fallback_api_key', 'fallback_model_name',
-      'checkin_start_hour', 'checkin_end_hour', 'quiet_start_hour', 'quiet_end_hour',
-      'system_prompt'
+      'api_provider',
+      'api_base_url',
+      'api_key',
+      'model_name',
+      'fallback_provider',
+      'fallback_api_base_url',
+      'fallback_api_key',
+      'fallback_model_name',
+      'checkin_start_hour',
+      'checkin_end_hour',
+      'quiet_start_hour',
+      'quiet_end_hour',
+      'system_prompt',
     ];
     const config = {};
     for (const key of keys) {
       let value = await configService.get(key, '');
-      // 脱敏密钥
       if ((key === 'api_key' || key === 'fallback_api_key') && value.length > 4) {
         value = '****' + value.slice(-4);
       }
@@ -36,22 +44,32 @@ router.post('/', authMiddleware, async (req, res) => {
   if (!updates || typeof updates !== 'object') {
     return res.status(400).json({ error: '无效数据' });
   }
+
   try {
     const allowedKeys = [
-      'api_provider', 'api_base_url', 'api_key', 'model_name',
-      'fallback_provider', 'fallback_api_base_url', 'fallback_api_key', 'fallback_model_name',
-      'checkin_start_hour', 'checkin_end_hour', 'quiet_start_hour', 'quiet_end_hour',
-      'system_prompt'
+      'api_provider',
+      'api_base_url',
+      'api_key',
+      'model_name',
+      'fallback_provider',
+      'fallback_api_base_url',
+      'fallback_api_key',
+      'fallback_model_name',
+      'checkin_start_hour',
+      'checkin_end_hour',
+      'quiet_start_hour',
+      'quiet_end_hour',
+      'system_prompt',
     ];
+
     for (const [key, value] of Object.entries(updates)) {
       if (!allowedKeys.includes(key)) continue;
-      // 更新或插入到 shadow_config
       const { error } = await supabase
         .from('shadow_config')
         .upsert({ key, value: String(value) }, { onConflict: 'key' });
       if (error) throw error;
     }
-    // 使缓存失效
+
     await configService.invalidateCache();
     res.json({ success: true });
   } catch (err) {
@@ -59,12 +77,13 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// 测试连通性（使用临时配置，不持久化）
+// 测试连通性
 router.post('/test-connection', authMiddleware, async (req, res) => {
   const { provider: provName, api_base_url, api_key, model_name } = req.body;
   if (!provName || !api_key) {
     return res.status(400).json({ error: 'provider 和 api_key 必填' });
   }
+
   const start = Date.now();
   try {
     const provider = getProvider(provName);
@@ -72,7 +91,7 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
     await provider.chat(messages, {
       apiBaseUrl: api_base_url,
       apiKey: api_key,
-      modelName: model_name || 'gpt-3.5-turbo'
+      modelName: model_name || 'gpt-3.5-turbo',
     });
     const latency = Date.now() - start;
     res.json({ success: true, latency_ms: latency });
@@ -84,26 +103,31 @@ router.post('/test-connection', authMiddleware, async (req, res) => {
 
 // 获取模型列表（仅对 OpenAI 兼容格式有效）
 router.get('/models', authMiddleware, async (req, res) => {
-  const providerName = req.query.provider || (await configService.get('api_provider', 'anthropic'));
-  const baseUrl = req.query.base_url || (await configService.get('api_base_url'));
-  const apiKey = req.query.api_key || (await configService.get('api_key'));
+  const providerName =
+    req.query.provider || (await configService.get('api_provider', 'anthropic'));
+  const baseUrl =
+    req.query.base_url || (await configService.get('api_base_url'));
+  const apiKey =
+    req.query.api_key || (await configService.get('api_key'));
+
   if (!baseUrl || !apiKey) {
-    return res.status(400).json({ error: '缺少 API 配置' });
+    return res.status(400).json({ error: '缺少必要信息' });
   }
-  // 仅 OpenAI 格式支持 /v1/models
-  if (!['openai', 'deepseek'].includes(providerName)) {
-    return res.json({ models: [], note: '当前 provider 不支持列出模型' });
+
+  // 仅 OpenAI / DeepSeek 支持模型列表
+  if (providerName !== 'openai' && providerName !== 'deepseek') {
+    return res.json({ models: [], note: '仅 OpenAI 兼容格式支持此功能' });
   }
+
   try {
-    const modelsUrl = baseUrl.replace(/\/chat\/completions$/, '') + '/models';
+    const modelsUrl = baseUrl.replace('/chat/completions', '/models');
     const response = await axios.get(modelsUrl, {
       headers: { Authorization: `Bearer ${apiKey}` },
-      timeout: 10000
+      timeout: 10000,
     });
-    const models = response.data.data ? response.data.data.map(m => m.id) : [];
-    res.json({ models });
+    res.json({ models: response.data.data || [] });
   } catch (err) {
-    res.status(502).json({ error: '无法获取模型列表: ' + err.message });
+    res.json({ models: [], error: err.message });
   }
 });
 
