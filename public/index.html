@@ -221,6 +221,11 @@
       // 根据 hash 或默认显示面板
       const hash = location.hash.replace('#', '') || 'status';
       showPanel(hash);
+          setInterval(() => {
+      if (document.getElementById('dashboard').style.display !== 'none') {
+        loadSettings();
+      }
+    }, 60000); // 每 60 秒刷新一次配置（包括时区）
     }
 
     async function checkHealth() {
@@ -311,6 +316,10 @@
         document.getElementById('cfgQuietStart').value = cfg.quiet_start_hour || '3';
         document.getElementById('cfgQuietEnd').value = cfg.quiet_end_hour || '10';
         document.getElementById('cfgTimezone').value = cfg.timezone || 'auto';
+                // 更新时区显示
+        const tz = cfg.timezone || 'auto';
+        const offset = cfg.timezone_offset || '';
+        document.getElementById('timezoneDisplay').textContent = formatTimezone(tz, offset);
       } catch (e) { console.warn('配置加载失败:', e.message); }
     }
 
@@ -337,6 +346,7 @@
         });
         const data = await res.json();
         if (data.success) alert('配置已保存');
+           loadSettings(); // 刷新状态面板中的时区显示
         else alert('保存失败: ' + (data.error || ''));
       } catch (e) { alert('请求失败: ' + e.message); }
     }
@@ -370,7 +380,9 @@
       if (panel) panel.classList.add('active');
       const btn = document.querySelector(`nav button[onclick*="${name}"]`);
       if (btn) btn.classList.add('active');
-      if (name === 'status') checkHealth();
+            if (name === 'status') {
+        checkHealth();
+        loadSettings();  // 确保时区显示
       if (name === 'logs' || name === 'schedule' || name === 'diary') loadStatus();
       if (name === 'settings') loadSettings();
       location.hash = name;
@@ -381,6 +393,23 @@
       div.textContent = str || '';
       return div.innerHTML;
     }
+
+    function formatTimezone(timezone, offset) {
+  if (timezone && timezone !== 'auto') {
+    return timezone + ' (手动)';
+  }
+  if (offset || offset === '0') {
+    const off = parseInt(offset, 10);
+    if (isNaN(off)) return '偏移未知';
+    const sign = off >= 0 ? '+' : '-';
+    const hours = Math.floor(Math.abs(off) / 60);
+    const mins = Math.abs(off) % 60;
+    let str = 'UTC' + sign + hours;
+    if (mins > 0) str += ':' + String(mins).padStart(2, '0');
+    return str + ' (自动检测)';
+  }
+  return '未设置';
+}
 
     // 自动登录（已有有效 token）
     (function () {
