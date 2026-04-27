@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>caustics · 影的仪表盘</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module" src="https://esm.sh/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&display=swap');
+    body {
+      font-family: 'Noto Serif SC', serif;
+      background-color: #faf8f5;
+      background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      color: #3b3a36;
+    }
+    .card {
+      background: rgba(255, 255, 250, 0.85);
+      backdrop-filter: blur(4px);
+      border-radius: 1.5rem;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.05);
+      border: 1px solid rgba(180, 170, 150, 0.2);
+    }
+    .btn-primary {
+      background: #d4a373;
+      color: white;
+      border-radius: 2rem;
+      padding: 0.5rem 1.5rem;
+      transition: all 0.2s;
+    }
+    .btn-primary:hover {
+      background: #bc8a5f;
+    }
+    .input-field {
+      background: rgba(255,255,250,0.8);
+      border: 1px solid #ddd6c8;
+      border-radius: 1rem;
+      padding: 0.5rem 1rem;
+      width: 100%;
+    }
+    .grain {
+      background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    }
+  </style>
+</head>
+<body class="grain min-h-screen p-4 md:p-8">
+  <div id="app" class="max-w-2xl mx-auto">
+    <!-- 登录界面 -->
+    <div id="login-panel" class="card p-6 mt-16">
+      <h1 class="text-3xl font-bold text-center mb-2">caustics</h1>
+      <p class="text-center text-gray-500 mb-6">影的仪表盘</p>
+      <input type="password" id="password-input" placeholder="管理密码" class="input-field mb-3">
+      <button id="login-btn" class="btn-primary w-full">进入</button>
+      <p id="login-error" class="text-red-400 text-sm mt-2 text-center hidden">密码错误</p>
+    </div>
+
+    <!-- 主面板（登录后显示） -->
+    <div id="main-panel" class="hidden space-y-6">
+      <!-- 状态卡片 -->
+      <div class="card p-4 flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-bold">服务状态</h2>
+          <p class="text-sm text-gray-500"><span id="status-text">在线</span> · 最近活动 <span id="last-active">--</span></p>
+        </div>
+        <div class="w-3 h-3 rounded-full bg-green-400" id="status-dot"></div>
+      </div>
+
+      <!-- 标签切换 -->
+      <div class="flex space-x-2 overflow-x-auto pb-1">
+        <button class="tab-btn px-4 py-1 rounded-full bg-[#d4a373] text-white text-sm" data-tab="records">记录</button>
+        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="todos">待办</button>
+        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="diary">日记</button>
+        <button class="tab-btn px-4 py-1 rounded-full bg-white/60 text-gray-600 text-sm" data-tab="settings">设置</button>
+      </div>
+
+      <!-- 内容区 -->
+      <div id="tab-records" class="tab-content space-y-3">
+        <div id="records-list" class="text-sm text-gray-600">加载中...</div>
+      </div>
+      <div id="tab-todos" class="tab-content hidden space-y-3">
+        <div id="todos-list" class="text-sm text-gray-600">加载中...</div>
+      </div>
+      <div id="tab-diary" class="tab-content hidden space-y-3">
+        <div id="diary-list" class="text-sm text-gray-600">加载中...</div>
+      </div>
+      <div id="tab-settings" class="tab-content hidden">
+        <div class="card p-4 space-y-4">
+          <h3 class="font-bold">API 配置</h3>
+          <div>
+            <label class="text-xs text-gray-500">Provider</label>
+            <select id="cfg-provider" class="input-field">
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="deepseek">DeepSeek</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">API Base URL</label>
+            <input id="cfg-base-url" class="input-field" placeholder="https://api.anthropic.com/v1/messages">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">API Key</label>
+            <input id="cfg-api-key" type="password" class="input-field" placeholder="sk-...">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">模型名称</label>
+            <input id="cfg-model" class="input-field" placeholder="claude-haiku-4-5-20251001">
+          </div>
+          <div class="flex space-x-2">
+            <button id="test-conn-btn" class="btn-primary flex-1">测试连接</button>
+            <button id="save-config-btn" class="btn-primary flex-1">保存配置</button>
+          </div>
+          <div id="test-result" class="text-sm"></div>
+          <hr class="my-2">
+          <h4 class="font-bold mt-4">Fallback 配置</h4>
+          <div>
+            <label class="text-xs text-gray-500">Provider</label>
+            <select id="fb-provider" class="input-field">
+              <option value="deepseek">DeepSeek</option>
+              <option value="openai">OpenAI</option>
+              <option value="anthropic">Anthropic</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">API Base URL</label>
+            <input id="fb-base-url" class="input-field">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">API Key</label>
+            <input id="fb-api-key" type="password" class="input-field">
+          </div>
+          <div>
+            <label class="text-xs text-gray-500">模型名称</label>
+            <input id="fb-model" class="input-field">
+          </div>
+          <hr class="my-2">
+          <h4 class="font-bold">时段设置</h4>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-500">Check-in 开始</label>
+              <input id="checkin-start" type="number" class="input-field" min="0" max="23">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">Check-in 结束</label>
+              <input id="checkin-end" type="number" class="input-field" min="0" max="23">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">安静开始</label>
+              <input id="quiet-start" type="number" class="input-field" min="0" max="23">
+            </div>
+            <div>
+              <label class="text-xs text-gray-500">安静结束</label>
+              <input id="quiet-end" type="number" class="input-field" min="0" max="23">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ---------- 全局状态 ----------
+    const supabaseUrl = 'https://rxvisgjsdsprbgknlnpz.supabase.co';      // 手动替换为你的 Supabase URL
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4dmlzZ2pzZHNwcmJna25sbnB6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY2MDg5NjksImV4cCI6MjA5MjE4NDk2OX0.QLXI2i_n4_F7CwDnRTocWfAtP6uwwyo_o1NOmgOSduM';      // 手动替换为你的 anon key
+    const apiBase = window.location.origin;        // Dashboard 与后端同域
+
+    let authToken = localStorage.getItem('caustics_dash_token') || '';
+    let supabase;
+
+    function initSupabase() {
+      if (supabaseUrl.startsWith('YOUR_')) {
+        console.warn('请将 public/index.html 中的 Supabase 配置替换为实际值');
+      }
+      supabase = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+    }
+
+    // ---------- 登录 ----------
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const pwd = document.getElementById('password-input').value;
+      try {
+        const res = await fetch(`${apiBase}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          authToken = data.token;
+          localStorage.setItem('caustics_dash_token', authToken);
+          showMainPanel();
+        } else {
+          document.getElementById('login-error').classList.remove('hidden');
+        }
+      } catch (e) {
+        document.getElementById('login-error').classList.remove('hidden');
+      }
+    });
+
+    // 如果已有 token，直接尝试加载主面板（不验证，后续请求会验证）
+    if (authToken) showMainPanel();
+
+    function showMainPanel() {
+      document.getElementById('login-panel').classList.add('hidden');
+      document.getElementById('main-panel').classList.remove('hidden');
+      initSupabase();
+      loadServiceStatus();
+      switchTab('records');
+    }
+
+    // ---------- 标签切换 ----------
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.replace('bg-[#d4a373]', 'bg-white/60'));
+        btn.classList.replace('bg-white/60', 'bg-[#d4a373]');
+        const tab = btn.dataset.tab;
+        switchTab(tab);
+      });
+    });
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${tab}`).classList.remove('hidden');
+      if (tab === 'records') loadRecords();
+      else if (tab === 'todos') loadTodos();
+      else if (tab === 'diary') loadDiary();
+      else if (tab === 'settings') loadSettings();
+    }
+
+    // ---------- 数据加载函数（使用 Supabase anon key 直读） ----------
+    async function loadServiceStatus() {
+      try {
+        const { data, error } = await supabase.from('shadow_logs').select('created_at').order('created_at', { ascending: false }).limit(1);
+        if (!error && data.length > 0) {
+          document.getElementById('last-active').textContent = new Date(data[0].created_at).toLocaleString();
+        } else {
+          document.getElementById('last-active').textContent = '暂无';
+        }
+        document.getElementById('status-text').textContent = '在线';
+        document.getElementById('status-dot').classList.remove('bg-gray-400');
+        document.getElementById('status-dot').classList.add('bg-green-400');
+      } catch (e) {
+        document.getElementById('status-text').textContent = '离线';
+        document.getElementById('status-dot').classList.remove('bg-green-400');
+        document.getElementById('status-dot').classList.add('bg-gray-400');
+      }
+    }
+
+    async function loadRecords() {
+      const list = document.getElementById('records-list');
+      list.innerHTML = '加载中...';
+      const { data, error } = await supabase.from('shadow_logs').select('*').order('created_at', { ascending: false }).limit(50);
+      if (error) { list.innerHTML = `<p class="text-red-400">加载失败: ${error.message}</p>`; return; }
+      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无记录</p>'; return; }
+      list.innerHTML = data.map(log => `
+        <div class="card p-3 text-sm">
+          <div class="text-gray-400 text-xs">${new Date(log.created_at).toLocaleString()} · ${log.category}</div>
+          <div class="mt-1 whitespace-pre-wrap">${log.content}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadTodos() {
+      const list = document.getElementById('todos-list');
+      list.innerHTML = '加载中...';
+      const { data, error } = await supabase.from('shadow_schedule').select('*').order('created_at', { ascending: false });
+      if (error) { list.innerHTML = `<p class="text-red-400">${error.message}</p>`; return; }
+      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无待办</p>'; return; }
+      list.innerHTML = data.map(item => `
+        <div class="card p-3 flex justify-between items-start">
+          <div>
+            <div class="font-medium">${item.title} ${item.status === 'done' ? '✅' : item.status === 'cancelled' ? '❌' : '⏳'}</div>
+            ${item.description ? `<div class="text-xs text-gray-500">${item.description}</div>` : ''}
+            <div class="text-xs text-gray-400">${item.remind_at ? '提醒: '+new Date(item.remind_at).toLocaleString() : ''}</div>
+          </div>
+          ${item.status === 'pending' ? `<div class="flex space-x-1">
+            <button class="text-green-600 text-xs" onclick="updateTodo('${item.id}', 'done')">完成</button>
+            <button class="text-red-400 text-xs" onclick="updateTodo('${item.id}', 'cancelled')">取消</button>
+          </div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function loadDiary() {
+      const list = document.getElementById('diary-list');
+      list.innerHTML = '加载中...';
+      const { data, error } = await supabase.from('shadow_diary').select('*').order('date', { ascending: false }).limit(20);
+      if (error) { list.innerHTML = `<p class="text-red-400">${error.message}</p>`; return; }
+      if (data.length === 0) { list.innerHTML = '<p class="text-gray-400">暂无日记</p>'; return; }
+      list.innerHTML = data.map(d => `
+        <div class="card p-3">
+          <div class="font-medium">${d.date}</div>
+          <div class="text-sm mt-1">${d.summary || '无摘要'}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadSettings() {
+      if (!authToken) return;
+      try {
+        const res = await fetch(`${apiBase}/api/config`, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (!res.ok) throw new Error('加载失败');
+        const cfg = await res.json();
+        document.getElementById('cfg-provider').value = cfg.api_provider || 'anthropic';
+        document.getElementById('cfg-base-url').value = cfg.api_base_url || '';
+        document.getElementById('cfg-api-key').value = cfg.api_key || '';
+        document.getElementById('cfg-model').value = cfg.model_name || '';
+        document.getElementById('fb-provider').value = cfg.fallback_provider || 'deepseek';
+        document.getElementById('fb-base-url').value = cfg.fallback_api_base_url || '';
+        document.getElementById('fb-api-key').value = cfg.fallback_api_key || '';
+        document.getElementById('fb-model').value = cfg.fallback_model_name || '';
+        document.getElementById('checkin-start').value = cfg.checkin_start_hour || '10';
+        document.getElementById('checkin-end').value = cfg.checkin_end_hour || '23';
+        document.getElementById('quiet-start').value = cfg.quiet_start_hour || '3';
+        document.getElementById('quiet-end').value = cfg.quiet_end_hour || '10';
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // ---------- 待办操作 ----------
+    window.updateTodo = async function(id, status) {
+      if (!authToken) return;
+      await fetch(`${apiBase}/api/schedule/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+        body: JSON.stringify({ status })
+      });
+      loadTodos(); // 刷新列表
+    };
+
+    // ---------- 设置保存 ----------
+    document.getElementById('save-config-btn').addEventListener('click', async () => {
+      const payload = {
+        api_provider: document.getElementById('cfg-provider').value,
+        api_base_url: document.getElementById('cfg-base-url').value,
+        api_key: document.getElementById('cfg-api-key').value,
+        model_name: document.getElementById('cfg-model').value,
+        fallback_provider: document.getElementById('fb-provider').value,
+        fallback_api_base_url: document.getElementById('fb-base-url').value,
+        fallback_api_key: document.getElementById('fb-api-key').value,
+        fallback_model_name: document.getElementById('fb-model').value,
+        checkin_start_hour: document.getElementById('checkin-start').value,
+        checkin_end_hour: document.getElementById('checkin-end').value,
+        quiet_start_hour: document.getElementById('quiet-start').value,
+        quiet_end_hour: document.getElementById('quiet-end').value,
+      };
+      try {
+        const res = await fetch(`${apiBase}/api/config`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) alert('配置已保存');
+        else alert('保存失败');
+      } catch (e) {
+        alert('网络错误');
+      }
+    });
+
+    // ---------- 测试连接 ----------
+    document.getElementById('test-conn-btn').addEventListener('click', async () => {
+      const resultDiv = document.getElementById('test-result');
+      resultDiv.textContent = '测试中...';
+      const payload = {
+        provider: document.getElementById('cfg-provider').value,
+        api_base_url: document.getElementById('cfg-base-url').value,
+        api_key: document.getElementById('cfg-api-key').value,
+        model_name: document.getElementById('cfg-model').value,
+      };
+      try {
+        const res = await fetch(`${apiBase}/api/config/test-connection`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+          resultDiv.innerHTML = `<span class="text-green-600">✓ 连接成功，延迟 ${data.latency_ms}ms</span>`;
+        } else {
+          resultDiv.innerHTML = `<span class="text-red-400">✗ 失败: ${data.error} (${data.latency_ms}ms)</span>`;
+        }
+      } catch (e) {
+        resultDiv.innerHTML = `<span class="text-red-400">请求出错</span>`;
+      }
+    });
+  </script>
+</body>
+</html>
