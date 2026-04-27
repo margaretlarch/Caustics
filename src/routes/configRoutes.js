@@ -22,12 +22,14 @@ router.get('/', authMiddleware, async (req, res) => {
       'checkin_end_hour',
       'quiet_start_hour',
       'quiet_end_hour',
-      'timezone',
       'system_prompt',
+      'timezone',          // 新增
+      'timezone_offset',   // 新增
     ];
     const config = {};
     for (const key of keys) {
       let value = await configService.get(key, '');
+      // 对密钥脱敏
       if ((key === 'api_key' || key === 'fallback_api_key') && value.length > 4) {
         value = '****' + value.slice(-4);
       }
